@@ -15,10 +15,11 @@ class Kavlax
 
   def initialize(argv=ARGV.dup)
     @command, @recfile = *argv
+    @command = @command.to_sym if @command
   end
 
   def run
-    if COMMANDS.key?(@command.to_sym)
+    if COMMANDS.key?(@command)
       items = Hengband::Item.parse_file(@recfile)
       __send__ @command, items
     else
