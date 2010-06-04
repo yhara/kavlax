@@ -1,0 +1,136 @@
+#!/usr/bin/env ruby
+# coding: utf-8
+
+require_relative "../lib/hengband"
+
+class Kavlax
+  COMMANDS = {
+    list: "アイテム一覧",
+    resists: "耐性別アイテム一覧",
+    shiwake: "いらなそうなアイテム検出",
+    random: "ランダムに装備を選ぶ",
+    auto: "全自動耐性パズル",
+    help: "このメッセージを表示",
+  }
+
+  def initialize(argv=ARGV.dup)
+    @command, @recfile = *argv
+  end
+
+  def run
+    if COMMANDS.key?(@command.to_sym)
+      items = Hengband::Item.parse_file(@recfile)
+      __send__ @command, items
+    else
+      help
+    end
+  end
+
+  def help
+    puts "usage: #$0 <command> ~/.angband/Hengband/<player>.txt"
+    puts "commands:"
+    COMMANDS.each do |name, desc|
+      puts "  #{name}: #{desc}"
+    end
+  end
+
+  def list(items)
+    puts items.sort.map{|x|
+      [
+        x.type, " ",
+        (x.damage if x.type == :weapon),
+        (x.defence if x.defence?),
+        " ", x.line,
+      ].join
+    }
+  end
+
+  def resists(items)
+    {
+       res: ["r", "酸電火冷毒閃暗破盲乱轟獄因沌劣恐".chars],
+       imm: ["*", "酸電火冷".chars],
+       aura: ["[", "炎電冷魔瞬".chars],
+       misc: ["", "易減投反麻視経遅活浮明警倍射瞬怒祝忌".chars],
+       esp: ["~", "感邪善無個人竜オト巨デ死動".chars],
+    }.each do |kind, (prefix, flags)|
+      flags.each do |s|
+        puts "----- #{prefix}#{s}: "
+        items.find_all{|x|
+          x.flags[kind].include? s}.each do |x|
+          puts "  #{x.line}"
+        end
+        puts
+      end
+    end
+  end
+
+  def shiwake(items)
+    def find_upper_compat(x, xs)
+      xs.find{|u|
+        x.flags[:res].all?{|res| u.flags[:res].include?(res)} and
+        x.flags[:imm].all?{|imm| u.flags[:imm].include?(imm)} and
+        (if x.defence? then u.defence >= x.defence else true end) and
+        (if x.type == :weapon then u.damage >= x.damage else true end)
+      }
+    end
+
+    items.group_by(&:type).each do |type, xs|
+      puts
+      puts "-- #{type}"
+      xs.each do |x|
+        if u = find_upper_compat(x, xs - [x])
+          puts "* #{x.line} は、"
+          puts "  #{u.line} でいいんじゃない？"
+          puts
+        end
+      end
+    end
+  end
+
+  def random(items)
+    player = Hengband::Player.new(items)
+    player.wear_random
+    puts player.wearings
+    puts player.resists
+  end
+
+  def auto(items)
+    items = items.group_by(&:type)
+    def pick(items)
+      my = {
+        a: items[:weapon].sample,
+        b: items[:weapon].sample,
+        c: items[:bow].sample,
+        d: items[:ring].sample,
+        e: items[:ring].sample,
+        f: items[:neck].sample,
+        g: items[:light].sample,
+        h: items[:armor].sample,
+        i: items[:cloak].sample,
+        j: items[:head].sample,
+        k: items[:hands].sample,
+        l: items[:feet].sample,
+      }
+    end
+
+    def res(my)
+      my.values.map{|x| x.flags[:res]}.inject(:+).uniq
+    end
+
+    def try(items)
+      begin
+        my = pick(items)
+      end until res(my).size == 16
+      my.each do |k, v|
+        puts "#{k}) #{v}"
+      end
+      puts res(my).join
+    end
+
+    try(items)
+  end
+
+end
+
+
+Kavlax.new.run
